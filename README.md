@@ -29,7 +29,7 @@ FixFlow is a **pure static site** — no build step, no dependencies, no Node.js
 
 ```bash
 # Clone the repository
-git clone https://github.com/<your-username>/fixflow.git
+git clone https://github.com/us-utkarshsri07/fixflow.git
 cd fixflow
 
 # macOS / Linux
