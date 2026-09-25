@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FixFlow — Bug-to-Fix Workflow</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <!-- ── Header ───────────────────────────────────────────────── -->
+  <header class="topbar">
+    <div class="topbar-brand">
+      <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/>
+        <path d="M12 8v4l3 3"/>
+      </svg>
+      <span class="brand-name">Fix<strong>Flow</strong></span>
+    </div>
+    <nav class="topbar-nav">
+      <span class="badge badge-version">v1.0</span>
+    </nav>
+  </header>
+
+  <!-- ── Main layout ───────────────────────────────────────────── -->
+  <main class="layout">
+
+    <!-- LEFT: Input panel -->
+    <aside class="panel panel-input">
+      <h2 class="panel-title">Bug Report</h2>
+
+      <form id="bugForm" novalidate>
+
+        <label class="field-label" for="bugTitle">Title <span class="required">*</span></label>
+        <input class="field-input" id="bugTitle" type="text" placeholder="e.g. Login fails on Safari 17" required />
+
+        <label class="field-label" for="bugSeverity">Severity <span class="required">*</span></label>
+        <select class="field-input" id="bugSeverity" required>
+          <option value="">— select —</option>
+          <option value="critical">🔴 Critical – app unusable</option>
+          <option value="high">🟠 High – major feature broken</option>
+          <option value="medium">🟡 Medium – degraded experience</option>
+          <option value="low">🟢 Low – cosmetic / minor</option>
+        </select>
+
+        <label class="field-label" for="bugDescription">Description <span class="required">*</span></label>
+        <textarea class="field-input field-textarea" id="bugDescription" rows="5"
+          placeholder="Steps to reproduce, observed vs expected behaviour…" required></textarea>
+
+        <label class="field-label" for="bugEnvironment">Environment</label>
+        <input class="field-input" id="bugEnvironment" type="text"
+          placeholder="e.g. Node 20, Chrome 124, macOS 14" />
+
+        <button class="btn btn-primary btn-full" id="analyzeBtn" type="submit">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/></svg>
+          Analyze Issue
+        </button>
+
+      </form>
+
+      <!-- Quick-fill example buttons -->
+      <div class="example-strip">
+        <span class="example-label">Try an example:</span>
+        <button class="btn-ghost" data-example="auth">Auth bug</button>
+        <button class="btn-ghost" data-example="perf">Perf regression</button>
+        <button class="btn-ghost" data-example="ui">UI glitch</button>
+      </div>
+    </aside>
+
+    <!-- RIGHT: Workflow + summary panel -->
+    <section class="panel panel-workflow" id="workflowPanel">
+
+      <!-- Empty state -->
+      <div class="empty-state" id="emptyState">
+        <svg viewBox="0 0 80 80" fill="none">
+          <circle cx="40" cy="40" r="38" stroke="#e5e7eb" stroke-width="2"/>
+          <path d="M26 40h28M40 26v28" stroke="#d1d5db" stroke-width="3" stroke-linecap="round"/>
+        </svg>
+        <p>Fill in the bug report and click <strong>Analyze Issue</strong> to generate a structured fix plan.</p>
+      </div>
+
+      <!-- Workflow stages (hidden until analysis runs) -->
+      <div class="workflow" id="workflow" hidden>
+
+        <div class="workflow-header">
+          <h2 class="panel-title" id="wfTitle"></h2>
+          <span class="badge" id="wfSeverityBadge"></span>
+        </div>
+
+        <!-- Stage tabs -->
+        <div class="stage-tabs" role="tablist">
+          <button class="stage-tab active" role="tab" data-stage="0">① Reproduce</button>
+          <button class="stage-tab" role="tab" data-stage="1">② Diagnose</button>
+          <button class="stage-tab" role="tab" data-stage="2">③ Fix Plan</button>
+          <button class="stage-tab" role="tab" data-stage="3">④ Validate</button>
+        </div>
+
+        <!-- Stage content panes -->
+        <div class="stage-content" id="stageContent"></div>
+
+        <!-- PR Summary card (shown after all stages viewed) -->
+        <div class="pr-summary" id="prSummary" hidden>
+          <div class="pr-summary-header">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M6 9v6M15.7 7.3l-7.4 9.4"/></svg>
+            PR-Ready Summary
+          </div>
+          <div id="prSummaryContent"></div>
+          <button class="btn btn-secondary" id="copyBtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            Copy Summary
+          </button>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ── Toast ─────────────────────────────────────────────────── -->
+  <div class="toast" id="toast"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
