@@ -7,7 +7,8 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     GITHUB_TOKEN: str = Field(default="")
     OPEN_AI_KEY: str = Field(default="")
-    AI_MODEL: str = Field(default="gpt-4o-mini")
+    GEMINI_API_KEY: str = Field(default="")
+    AI_MODEL: str = Field(default="gemini-1.5-flash")
     BACKEND_HOST: str = Field(default="0.0.0.0")
     BACKEND_PORT: int = Field(default=8000)
     FRONTEND_ORIGIN: str = Field(default="http://localhost:5173")

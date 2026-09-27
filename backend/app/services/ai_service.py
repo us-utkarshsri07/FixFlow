@@ -11,6 +11,7 @@ from app.services import code_service
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
+
 async def analyze_bug(
     repository_url: str,
     title: str,
@@ -18,16 +19,10 @@ async def analyze_bug(
     description: str,
     environment: Optional[str],
 ) -> Bug:
-    """
-    Analyse a bug report and return a structured Bug.
-
-    - If OPEN_AI_KEY is set   → calls OpenAI and returns AI analysis.
-    - If OPEN_AI_KEY is not set → falls back to plain-input passthrough
-      (no fake data, just the user's own description as the result).
-    """
     settings = get_settings()
 
-    if not settings.OPEN_AI_KEY:
+    # Fallback: no AI key set at all
+    if not settings.GEMINI_API_KEY and not settings.OPEN_AI_KEY:
         return code_service.analyse_code_snippet(
             description=description,
             title=title,
@@ -36,41 +31,27 @@ async def analyze_bug(
             environment=environment,
         )
 
-    try:
-        import openai  # type: ignore[import-untyped]
-    except ImportError:
-        raise RuntimeError("openai package is not installed. Run: pip install openai")
+    system_prompt = (
+        "You are an expert software security and reliability engineer. "
+        "Analyse the bug report and return a JSON object with these exact keys: "
+        "title, detected_severity (one of: low/medium/high/critical), root_cause, "
+        "affected_file, line_number (integer), explanation, impact, recommended_fix, "
+        "confidence (integer 0-100). "
+        "Return raw JSON only — no markdown fences."
+    )
+    user_prompt = (
+        f"Repository: {repository_url}\n"
+        f"Bug title: {title}\n"
+        f"Severity hint: {severity}\n"
+        f"Description:\n{description}\n"
+        f"Environment: {environment or 'not specified'}"
+    )
 
     try:
-        client = openai.AsyncOpenAI(api_key=settings.OPEN_AI_KEY)
-
-        system_prompt = (
-            "You are an expert software security and reliability engineer. "
-            "Analyse the bug report and return a JSON object with these exact keys: "
-            "title, detected_severity (one of: low/medium/high/critical), root_cause, "
-            "affected_file, line_number (integer), explanation, impact, recommended_fix, "
-            "confidence (integer 0-100). "
-            "Return raw JSON only — no markdown fences."
-        )
-        user_prompt = (
-            f"Repository: {repository_url}\n"
-            f"Bug title: {title}\n"
-            f"Severity hint: {severity}\n"
-            f"Description:\n{description}\n"
-            f"Environment: {environment or 'not specified'}"
-        )
-
-        response = await client.chat.completions.create(
-            model=settings.AI_MODEL,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user",   "content": user_prompt},
-            ],
-            temperature=0.2,
-            response_format={"type": "json_object"},
-        )
-
-        data = json.loads(response.choices[0].message.content or "{}")
+        if settings.GEMINI_API_KEY:
+            data = await _call_gemini(settings.GEMINI_API_KEY, settings.AI_MODEL, system_prompt, user_prompt)
+        else:
+            data = await _call_openai(settings.OPEN_AI_KEY, settings.AI_MODEL, system_prompt, user_prompt)
 
         return Bug(
             id=str(uuid.uuid4()),
@@ -86,7 +67,9 @@ async def analyze_bug(
         )
 
     except Exception as exc:
-        raise RuntimeError(f"OpenAI analysis failed: {exc}") from exc
+        raise RuntimeError(f"AI analysis failed: {exc}") from exc
+
+
 async def generate_fix(
     bug_id: str,
     repository_url: str,
@@ -94,53 +77,32 @@ async def generate_fix(
     root_cause: str,
     recommended_fix: str,
 ) -> FixResponse:
-    """
-    Generate a real code fix with OpenAI.
-
-    Raises RuntimeError with a clear message if OPEN_AI_KEY is missing
-    or the API call fails.
-    """
     settings = get_settings()
 
-    if not settings.OPEN_AI_KEY:
+    if not settings.GEMINI_API_KEY and not settings.OPEN_AI_KEY:
         raise RuntimeError(
-            "OPEN_AI_KEY is not set in backend/.env. "
-            "Add your OpenAI API key to enable fix generation."
+            "No AI key set. Add GEMINI_API_KEY or OPEN_AI_KEY to backend/.env"
         )
+
+    system_prompt = (
+        "You are a senior software engineer. "
+        "Generate a code fix for the described bug. "
+        "Return a JSON object with keys: branch_name, commit_message, diffs. "
+        "diffs is a list of objects each with: file, before (original code snippet), "
+        "after (fixed code snippet), explanation. Return raw JSON only."
+    )
+    user_prompt = (
+        f"Repository: {repository_url}\n"
+        f"Affected file: {affected_file}\n"
+        f"Root cause: {root_cause}\n"
+        f"Recommended fix: {recommended_fix}"
+    )
 
     try:
-        import openai  # type: ignore[import-untyped]
-    except ImportError:
-        raise RuntimeError("openai package is not installed. Run: pip install openai")
-
-    try:
-        client = openai.AsyncOpenAI(api_key=settings.OPEN_AI_KEY)
-
-        system_prompt = (
-            "You are a senior software engineer. "
-            "Generate a code fix for the described bug. "
-            "Return a JSON object with keys: branch_name, commit_message, diffs. "
-            "diffs is a list of objects each with: file, before (original code snippet), "
-            "after (fixed code snippet), explanation. Return raw JSON only."
-        )
-        user_prompt = (
-            f"Repository: {repository_url}\n"
-            f"Affected file: {affected_file}\n"
-            f"Root cause: {root_cause}\n"
-            f"Recommended fix: {recommended_fix}"
-        )
-
-        response = await client.chat.completions.create(
-            model=settings.AI_MODEL,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user",   "content": user_prompt},
-            ],
-            temperature=0.2,
-            response_format={"type": "json_object"},
-        )
-
-        data = json.loads(response.choices[0].message.content or "{}")
+        if settings.GEMINI_API_KEY:
+            data = await _call_gemini(settings.GEMINI_API_KEY, settings.AI_MODEL, system_prompt, user_prompt)
+        else:
+            data = await _call_openai(settings.OPEN_AI_KEY, settings.AI_MODEL, system_prompt, user_prompt)
 
         diffs = [
             FileDiff(
@@ -161,4 +123,41 @@ async def generate_fix(
         )
 
     except Exception as exc:
-        raise RuntimeError(f"OpenAI fix generation failed: {exc}") from exc
+        raise RuntimeError(f"AI fix generation failed: {exc}") from exc
+
+
+async def _call_gemini(api_key: str, model: str, system_prompt: str, user_prompt: str) -> dict:
+    try:
+        import google.generativeai as genai  # type: ignore[import-untyped]
+    except ImportError:
+        raise RuntimeError("google-generativeai package is not installed. Run: pip install google-generativeai")
+
+    genai.configure(api_key=api_key)
+    gemini_model = genai.GenerativeModel(
+        model_name=model if "gemini" in model else "gemini-1.5-flash",
+        system_instruction=system_prompt,
+    )
+    response = await gemini_model.generate_content_async(
+        user_prompt,
+        generation_config={"response_mime_type": "application/json", "temperature": 0.2},
+    )
+    return json.loads(response.text)
+
+
+async def _call_openai(api_key: str, model: str, system_prompt: str, user_prompt: str) -> dict:
+    try:
+        import openai  # type: ignore[import-untyped]
+    except ImportError:
+        raise RuntimeError("openai package is not installed. Run: pip install openai")
+
+    client = openai.AsyncOpenAI(api_key=api_key)
+    response = await client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user",   "content": user_prompt},
+        ],
+        temperature=0.2,
+        response_format={"type": "json_object"},
+    )
+    return json.loads(response.choices[0].message.content or "{}")
